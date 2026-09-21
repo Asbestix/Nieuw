@@ -9,7 +9,7 @@ zodat twee agents niet hetzelfde bouwen.
 
 | Agent | Taak | Sinds | Raakt | PR |
 |---|---|---|---|---|
-| claude | B1 vastleggen: de naam blijft NIEUW | 21-09-2026 | `docs/PLAN.md` | — |
+| _(niemand)_ | | | | |
 
 ## Hoe je het gebruikt
 

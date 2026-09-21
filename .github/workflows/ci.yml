@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Twee runs op dezelfde ref hoeven niet naast elkaar; een nieuwe push maakt de
+# vorige meting waardeloos, dus die mag weg.
+concurrency:
+  group: nieuw-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# ── WAAROM `runs-on` EEN VARIABELE MET TERUGVAL IS ────────────────────────
+# Gemeten 20-09-2026: het Actions-budget van dit account raakte op en toen
+# stond alles stil. Jobs starten dan niet eens -- geen logs, geen stappen,
+# enkel de annotatie "The job was not started because an Actions budget is
+# preventing further use." Zelfgehoste runners verbruiken geen minuten.
+#
+# Zolang de repo-variabele CI_RUNNER_NIEUW leeg is verandert er niets: elke
+# job draait op ubuntu-latest. Zet de eigenaar haar op een runner-label, dan
+# wijkt alles in een tik uit naar de eigen pool, zonder de workflow aan te
+# raken.
+#
+# UITZONDERING: een workflow die de runnerpool zelf beheert houdt
+# `runs-on: ubuntu-latest` LETTERLIJK -- anders kan een kapotte pool zichzelf
+# niet repareren. Zo'n workflow staat hier (nog) niet.
+
+jobs:
+  hygiene:
+    name: Repo-hygiëne (grootte en geheimen)
+    runs-on: ${{ vars.CI_RUNNER_NIEUW || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # AGENTS.md: geen bestanden > 1 MB in Git. Een gate is goedkoper dan een
+      # history-rewrite: eenmaal gecommit is groot bestand er niet meer uit
+      # zonder elke checkout te breken.
+      - name: Geen bestanden groter dan 1 MB
+        run: |
+          set -euo pipefail
+          groot=$(git ls-files -z \
+            | xargs -0 -r -I{} sh -c 'test -f "{}" && printf "%s\t%s\n" "$(wc -c < "{}")" "{}"' \
+            | awk -F'\t' '$1 > 1048576')
+          if [ -n "$groot" ]; then
+            echo "::error title=Te groot::Deze bestanden zijn groter dan 1 MB en horen niet in Git (AGENTS.md):"
+            echo "$groot"
+            exit 1
+          fi
+          echo "Alle $(git ls-files | wc -l) bestanden zijn kleiner dan 1 MB."
+
+      # AGENTS.md: geen wachtwoorden, tokens of sessiegegevens in de repo.
+      # Dit vangt de grove vormen -- een gecommit .env of sleutelbestand, en de
+      # herkenbare tokenvormen. Het is een vangnet, geen bewijs van afwezigheid:
+      # een geheim in een eigen formaat glipt er langs.
+      - name: Geen geheimen in de repo
+        run: |
+          set -euo pipefail
+          fout=0
+          bestanden=$(git ls-files | grep -Ei '(^|/)\.env($|\.)|\.(key|pem|p12|keystore|jks|token)$' | grep -v '\.env\.voorbeeld$' || true)
+          if [ -n "$bestanden" ]; then
+            echo "::error title=Geheim bestand::Deze bestanden horen in ~/.config/nieuw/ of in een repo-secret, niet in Git:"
+            echo "$bestanden"
+            fout=1
+          fi
+          # Bekende tokenvormen. `git grep -I` slaat binaire bestanden over.
+          if git grep -InE '(ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{60,}|gh[opsu]_[A-Za-z0-9]{36}|-----BEGIN [A-Z ]*PRIVATE KEY-----)' \
+               -- . ':(exclude).github/workflows/ci.yml' ; then
+            echo "::error title=Mogelijk geheim::Een tokenvorm staat letterlijk in de repo. Draai hem in en haal hem eruit."
+            fout=1
+          fi
+          [ "$fout" -eq 0 ] && echo "Geen geheimen gevonden in $(git ls-files | wc -l) bestanden."
+          exit "$fout"
+
+  docs:
+    name: Docs (leesvolgorde en claimtabel)
+    runs-on: ${{ vars.CI_RUNNER_NIEUW || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # De vier documenten uit de leesvolgorde van AGENTS.md moeten bestaan.
+      # Verdwijnt er een, dan leest de volgende sessie stilzwijgend minder --
+      # dat is precies het soort stille fout dat niets rood maakt.
+      - name: De leesvolgorde bestaat
+        run: |
+          set -euo pipefail
+          ontbreekt=0
+          for f in AGENTS.md CLAUDE.md docs/PLAN.md docs/AAN_HET_WERK.md docs/WERKVERDELING.md; do
+            if [ ! -f "$f" ]; then
+              echo "::error title=Ontbreekt::$f staat in de leesvolgorde van AGENTS.md maar bestaat niet."
+              ontbreekt=1
+            fi
+          done
+          exit "$ontbreekt"
+
+      # De claimtabel moet zijn kolomkop houden; anders schrijft de volgende
+      # agent zijn regel in een vorm die niemand meer kan lezen.
+      - name: Claimtabel heeft nog zijn kolommen
+        run: |
+          set -euo pipefail
+          grep -q '^| Agent | Taak | Sinds | Raakt | PR |$' docs/AAN_HET_WERK.md \
+            || { echo "::error title=Claimtabel::De kop 'Agent | Taak | Sinds | Raakt | PR' staat niet meer in docs/AAN_HET_WERK.md."; exit 1; }
+          echo "Claimtabel in orde."
+
+  code:
+    name: Code (Python)
+    runs-on: ${{ vars.CI_RUNNER_NIEUW || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # Let op: Jarvis' CI draait op 3.12. Deze repo pint 3.11 omdat dat is
+          # wat de agent-container heeft (CLAUDE.md), zodat een lokale meting
+          # en CI hetzelfde meten.
+          python-version: "3.11"
+
+      # Zolang er nog geen code is doet deze job niets en is hij groen. Dat is
+      # bedoeld: de workflow staat er vanaf de eerste commit zodat `runs-on`
+      # nooit achteraf in tien bestanden hoeft te worden rechtgezet.
+      - name: Python-bestanden compileren
+        run: |
+          set -euo pipefail
+          bestanden=$(git ls-files '*.py')
+          if [ -z "$bestanden" ]; then
+            echo "Nog geen Python in de repo -- niets te compileren."
+            exit 0
+          fi
+          echo "$bestanden" | xargs -r python3 -m py_compile
+          echo "$(echo "$bestanden" | wc -l) bestanden compileren."
+
+      - name: Tests
+        run: |
+          set -euo pipefail
+          if [ -d tests ]; then
+            python3 -m unittest discover -s tests -v
+          elif [ -d tools/tests ]; then
+            python3 -m unittest discover -s tools/tests -v
+          else
+            echo "Nog geen tests/ of tools/tests/ -- niets te draaien."
+          fi

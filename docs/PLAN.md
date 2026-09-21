@@ -32,14 +32,18 @@ Leesvolgorde voor elke nieuwe sessie (mens of agent):
 Elk besluit heeft een aanbeveling met onderbouwing. Zolang het niet genomen is,
 blijft het *voorgesteld*.
 
-### B1 — Wat bouwen we, en hoe heet het: **open** (eigenaar)
+### B1 — De naam: **besloten: NIEUW** (eigenaar, 21-09-2026). Wat we bouwen: **open**
 
-De repo is vandaag opgezet op de conventies van BAD en Jarvis, zonder scope.
-Nodig: één alinea over wat het project is, en de echte naam. De naam raakt zes
-plekken: de repo zelf, `AGENTS.md`, `CLAUDE.md`, dit plan, `.gitignore`
-(`~/.config/nieuw/`) en — belangrijkst — de CI-variabele `CI_RUNNER_NIEUW` in
-`ci.yml`. Eén zoek-en-vervang, maar doe hem vóór de eerste runner-flip, want
-daarna staat de naam ook in een repo-variabele op GitHub.
+**De naam blijft `NIEUW`** — de eigenaar bevestigde dat op 21-09-2026, en
+daarmee is de werktitel de echte naam. Gevolg: er valt niets te hernoemen. De
+zes plekken (`AGENTS.md`, `CLAUDE.md`, `README.md`, dit plan, `.gitignore` met
+`~/.config/nieuw/`, en de CI-variabele `CI_RUNNER_NIEUW` in `ci.yml`) staan al
+goed, en de eerste runner-flip kan zonder voorbehoud — dat was de enige
+tijdsdruk op dit besluit. **T4 vervalt.**
+
+**Nog wél open: wat het project ís.** Er is één alinea nodig over wat NIEUW
+moet worden en wat fase 1 af maakt; zolang die er niet is blijft sectie 2 leeg
+en kan er geen code beginnen. Dat blijft T3.
 
 ### B2 — Samenvoegen: **besloten: de agent voegt zelf samen** (20-09-2026)
 
@@ -73,7 +77,7 @@ de mappenverdeling hangt aan wat het project wordt.
 | Mijlpaal | Resultaat | Acceptatie | Vereist |
 |---|---|---|---|
 | **M0 Fundament** | Leesvolgorde, claimtabel, werkverdeling, `.gitignore`, CI met runner-terugval | Samengevoegd op `main`, CI groen | — |
-| **M1 Scope** | B1 beslist: wat het project is, hoe het heet, wat fase 1 af maakt | Eén alinea in sectie 2, naam overal doorgevoerd | M0 |
+| **M1 Scope** | Wat het project is en wat fase 1 af maakt (de naam is besloten: NIEUW) | Eén alinea in sectie 2 | M0 |
 | **M2 Eerste code** | Het eerste werkende ding, met tests die in CI draaien | CI-job `code` doet echt iets en is groen | M1 |
 | **M3 Eigen runners** | CI draait op de eigen pool in plaats van op GitHub-minuten | Een run met `runner_name` uit de eigen pool, en `CI_RUNNER_NIEUW` gezet | M0, T1, T2 |
 
@@ -87,15 +91,13 @@ Eén taak = één GitHub-issue = één PR. Status altijd mét bewijs.
 | T1 | Provisioning repo-onafhankelijk maken in Jarvis: `ci-runner-provision.yml` krijgt inputs voor `--gh-owner`, `--gh-repo` en `--label` en geeft ze door, en `flip_variable()` krijgt de variabelenaam als parameter | Claude (in Jarvis) | **open** — gemeten 20-09-2026 op de checkout van Jarvis: `tools/ci_runner_provision.py` draagt `--gh-owner`/`--gh-repo`/`--label` (regels 41-50), maar de workflow kent die inputs niet en roept het script kaal aan (`create`, `status`, `flip`, … zonder een van de drie), en `flip_variable()` schrijft de vaste naam `CI_RUNNER_HEAVY` (regels 462-467). Zonder deze taak kan de pool alleen Jarvis bedienen | Jarvis: `.github/workflows/ci-runner-provision.yml`, `tools/ci_runner_provision.py` |
 | T2 | De twee repo-secrets zetten: `HCLOUD_TOKEN` en `CI_RUNNER_PAT` (fine-grained, **alleen** "Actions: Read and write", bewust géén Contents-rechten) | Eigenaar | **open** — blokkeert M3 | GitHub-secrets van deze repo |
 | T3 | B1 beslissen: scope, echte naam, wat fase 1 af maakt | Eigenaar | **open** — blokkeert alles wat code is | sectie 2 en 3 |
-| T4 | Naam doorvoeren zodra B1 er is: zes plekken, en vóór de eerste runner-flip | Claude | **open**, wacht op T3 | hele repo |
+| T4 | Naam doorvoeren zodra B1 er is | Claude | **vervallen** 21-09-2026 — B1 koos `NIEUW`, precies de naam die er al overal staat, dus er is niets door te voeren | — |
 | T5 | Meldingen naar het toestel: `bridge_notify_send_enabled` aanzetten op de Fold, daarna een proefmelding via `POST $BRIDGE_URL/api/bridge/notify_send` | Eigenaar (schakelaar), Claude (proef) | **open** — de schakelaar staat standaard uit en is bewust niet zelf-armbaar | `CLAUDE.md` |
 | T6 | Licentie kiezen en vastleggen | Eigenaar | **open** | `LICENSE`, `README.md` |
 | T7 | Deze opzet in de repo krijgen | Eigenaar (app-toegang), Claude (push) | **gedaan** 21-09-2026 — `add_repo` lukte bij de achtste poging, nadat de eigenaar de repo aan de Claude GitHub App had toegevoegd; de set kwam uit de transportmap in Jarvis PR #8345, die daarna gesloten is | hele repo |
 
 ## 6. Eerstvolgende stap
 
-**T3 bij de eigenaar**: zeg wat dit project wordt en hoe het heet. Zolang dat
-niet beslist is heet alles `NIEUW` en heet de CI-variabele `CI_RUNNER_NIEUW`.
-Daarna T4 (naam doorvoeren over zes plekken, **vóór** de eerste runner-flip) en
-M2. Onafhankelijk daarvan kan T1 al in Jarvis, en T2 kan de eigenaar op elk
-moment doen.
+**T3 bij de eigenaar**: zeg wat dit project wordt. De naam is beslist (B1:
+`NIEUW`), dus dit is het enige dat M2 nog blokkeert. Onafhankelijk daarvan kan
+T1 al in Jarvis, en T2 kan de eigenaar op elk moment doen.
